@@ -1,0 +1,190 @@
+import XCTest
+@testable import SelectSoundCore
+
+final class SelectSoundCommandTests: XCTestCase {
+    func testKeepsCurrentDevicesWhenUserPressesEnterAndReportsNoChanges() {
+        let fake = FakeAudioSystem()
+
+        let result = runCommand(fake: fake, input: ["", "", "1"])
+
+        XCTAssertEqual(result.code, 0)
+        XCTAssertTrue(result.stdout.contains("No changes."))
+        XCTAssertEqual(fake.setInputHistory, [])
+        XCTAssertEqual(fake.setOutputHistory, [])
+    }
+
+    func testAppliesSelectedInputAndOutputAfterExplicitOK() {
+        let fake = FakeAudioSystem()
+
+        let result = runCommand(fake: fake, input: ["2", "2", "ok"])
+
+        XCTAssertEqual(result.code, 0)
+        XCTAssertTrue(result.stdout.contains("Applied devices:"))
+        XCTAssertEqual(fake.defaultInput?.uid, "input-2")
+        XCTAssertEqual(fake.defaultOutput?.uid, "output-2")
+        XCTAssertEqual(fake.setInputHistory, ["input-2"])
+        XCTAssertEqual(fake.setOutputHistory, ["output-2"])
+    }
+
+    func testInvalidSelectionRepromptsOnSameList() {
+        let fake = FakeAudioSystem()
+
+        let result = runCommand(fake: fake, input: ["99", "2", "", "1"])
+
+        XCTAssertEqual(result.code, 0)
+        XCTAssertTrue(result.stdout.contains("Invalid selection. Try again."))
+        XCTAssertEqual(fake.defaultInput?.uid, "input-2")
+        XCTAssertEqual(fake.defaultOutput?.uid, "output-1")
+    }
+
+    func testConfirmationCancelDoesNotApplyChanges() {
+        let fake = FakeAudioSystem()
+
+        let result = runCommand(fake: fake, input: ["2", "2", "2"])
+
+        XCTAssertEqual(result.code, 0)
+        XCTAssertTrue(result.stdout.contains("Cancelled."))
+        XCTAssertEqual(fake.defaultInput?.uid, "input-1")
+        XCTAssertEqual(fake.defaultOutput?.uid, "output-1")
+        XCTAssertEqual(fake.setInputHistory, [])
+        XCTAssertEqual(fake.setOutputHistory, [])
+    }
+
+    func testErrorsWhenInputDevicesAreMissing() {
+        let fake = FakeAudioSystem()
+        fake.inputs = []
+        fake.defaultInput = nil
+
+        let result = runCommand(fake: fake, input: [])
+
+        XCTAssertEqual(result.code, 1)
+        XCTAssertTrue(result.stderr.contains("No selectable audio input devices found."))
+    }
+
+    func testRollsBackInputWhenOutputApplyFails() {
+        let fake = FakeAudioSystem()
+        fake.outputError = FakeAudioError.failed
+
+        let result = runCommand(fake: fake, input: ["2", "2", "1"])
+
+        XCTAssertEqual(result.code, 1)
+        XCTAssertTrue(result.stderr.contains("Could not apply the selected devices"))
+        XCTAssertEqual(fake.defaultInput?.uid, "input-1")
+        XCTAssertEqual(fake.defaultOutput?.uid, "output-1")
+        XCTAssertEqual(fake.setInputHistory, ["input-2", "input-1"])
+        XCTAssertEqual(fake.setOutputHistory, ["output-2"])
+    }
+
+    func testDuplicateNamesIncludeUIDs() {
+        let fake = FakeAudioSystem()
+        fake.inputs = [
+            AudioDevice(id: 1, uid: "input-1", name: "USB Audio"),
+            AudioDevice(id: 3, uid: "input-3", name: "USB Audio")
+        ]
+        fake.defaultInput = fake.inputs[0]
+
+        let result = runCommand(fake: fake, input: ["", "", "1"])
+
+        XCTAssertEqual(result.code, 0)
+        XCTAssertTrue(result.stdout.contains("USB Audio (UID: input-1)"))
+        XCTAssertTrue(result.stdout.contains("USB Audio (UID: input-3)"))
+    }
+
+    func testVersionDoesNotTouchAudioSystem() {
+        let fake = FakeAudioSystem()
+
+        let result = runCommand(fake: fake, input: [], arguments: ["--version"])
+
+        XCTAssertEqual(result.code, 0)
+        XCTAssertEqual(result.stdout, "select-sound 0.1.0\n")
+        XCTAssertEqual(fake.inputDevicesCalls, 0)
+        XCTAssertEqual(fake.outputDevicesCalls, 0)
+    }
+
+    private func runCommand(
+        fake: FakeAudioSystem,
+        input: [String],
+        arguments: [String] = []
+    ) -> (code: Int32, stdout: String, stderr: String) {
+        var remainingInput = input
+        var stdout = ""
+        var stderr = ""
+        let command = SelectSoundCommand(
+            audioSystem: fake,
+            language: .english,
+            readInput: {
+                guard !remainingInput.isEmpty else {
+                    return nil
+                }
+                return remainingInput.removeFirst()
+            },
+            writeOutput: { stdout += $0 },
+            writeErrorOutput: { stderr += $0 }
+        )
+
+        let code = command.run(arguments: arguments)
+        return (code, stdout, stderr)
+    }
+}
+
+private enum FakeAudioError: Error {
+    case failed
+}
+
+private final class FakeAudioSystem: AudioSystem {
+    var inputs = [
+        AudioDevice(id: 1, uid: "input-1", name: "Built-in Microphone"),
+        AudioDevice(id: 2, uid: "input-2", name: "USB Microphone")
+    ]
+    var outputs = [
+        AudioDevice(id: 11, uid: "output-1", name: "Built-in Speakers"),
+        AudioDevice(id: 12, uid: "output-2", name: "USB Speakers")
+    ]
+    var defaultInput: AudioDevice?
+    var defaultOutput: AudioDevice?
+    var inputError: Error?
+    var outputError: Error?
+    var setInputHistory: [String] = []
+    var setOutputHistory: [String] = []
+    var inputDevicesCalls = 0
+    var outputDevicesCalls = 0
+
+    init() {
+        defaultInput = inputs[0]
+        defaultOutput = outputs[0]
+    }
+
+    func inputDevices() throws -> [AudioDevice] {
+        inputDevicesCalls += 1
+        return inputs
+    }
+
+    func outputDevices() throws -> [AudioDevice] {
+        outputDevicesCalls += 1
+        return outputs
+    }
+
+    func defaultInputDevice() throws -> AudioDevice? {
+        defaultInput
+    }
+
+    func defaultOutputDevice() throws -> AudioDevice? {
+        defaultOutput
+    }
+
+    func setDefaultInputDevice(_ device: AudioDevice) throws {
+        setInputHistory.append(device.uid)
+        if let inputError {
+            throw inputError
+        }
+        defaultInput = device
+    }
+
+    func setDefaultOutputDevice(_ device: AudioDevice) throws {
+        setOutputHistory.append(device.uid)
+        if let outputError {
+            throw outputError
+        }
+        defaultOutput = device
+    }
+}

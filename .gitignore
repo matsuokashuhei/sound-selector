@@ -1,0 +1,8 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+.agents/
+.github/hooks/
+opencode.json
+skills-lock.json
