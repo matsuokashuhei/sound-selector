@@ -24,7 +24,8 @@ audio-selector
 ### Homebrew
 
 ```sh
-brew install matsuokashuhei/audio-selector/audio-selector
+brew tap matsuokashuhei/audio-selector
+brew install audio-selector
 ```
 
 ### SwiftPM
