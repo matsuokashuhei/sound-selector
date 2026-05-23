@@ -19,7 +19,7 @@ select-sound
 
 ## インストール
 
-必要環境: macOS 26 以降、Swift 6.2 以降。
+必要環境: macOS 15 以降、Swift 6.0 以降。
 
 ### Homebrew
 
