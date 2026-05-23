@@ -159,7 +159,7 @@ final class SelectSoundCommandTests: XCTestCase {
         let result = runCommand(fake: fake, input: [], arguments: ["--version"])
 
         XCTAssertEqual(result.code, 0)
-        XCTAssertEqual(result.stdout, "audio-selector 0.1.2\n")
+        XCTAssertEqual(result.stdout, "audio-selector 0.1.3\n")
         XCTAssertEqual(fake.inputDevicesCalls, 0)
         XCTAssertEqual(fake.outputDevicesCalls, 0)
     }
