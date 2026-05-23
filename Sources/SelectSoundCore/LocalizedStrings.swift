@@ -204,14 +204,14 @@ struct LocalizedStrings {
         switch language {
         case .japanese:
             return """
-            select-sound \(AppVersion.current)
+            \(AppCommand.name) \(AppVersion.current)
 
             macOS の音声入力デバイスと通常の音声出力デバイスを番号で選択します。
 
             使い方:
-              select-sound
-              select-sound --help
-              select-sound --version
+              \(AppCommand.name)
+              \(AppCommand.name) --help
+              \(AppCommand.name) --version
 
             操作:
               Enter  現在のデバイスを維持
@@ -222,14 +222,14 @@ struct LocalizedStrings {
             """
         case .english:
             return """
-            select-sound \(AppVersion.current)
+            \(AppCommand.name) \(AppVersion.current)
 
             Select the macOS audio input device and normal audio output device by number.
 
             Usage:
-              select-sound
-              select-sound --help
-              select-sound --version
+              \(AppCommand.name)
+              \(AppCommand.name) --help
+              \(AppCommand.name) --version
 
             Controls:
               Enter  Keep the current device
