@@ -25,3 +25,6 @@ jobs:
 
       - name: Test
         run: swift test
+
+      - name: Smoke test executable
+        run: swift run audio-selector --version

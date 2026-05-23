@@ -3,12 +3,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "sound-selector",
+    name: "audio-selector",
     platforms: [
         .macOS(.v15)
     ],
     products: [
-        .executable(name: "select-sound", targets: ["SelectSoundCLI"])
+        .executable(name: "audio-selector", targets: ["SelectSoundCLI"])
     ],
     targets: [
         .target(name: "SelectSoundCore"),

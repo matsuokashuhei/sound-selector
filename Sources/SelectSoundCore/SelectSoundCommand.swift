@@ -5,6 +5,10 @@ enum AppVersion {
     static let current = "0.1.2"
 }
 
+enum AppCommand {
+    static let name = "audio-selector"
+}
+
 enum ConfirmationKey: Equatable {
     case enter
     case escape
@@ -101,7 +105,7 @@ public final class SelectSoundCommand {
                 writeOutput(strings.help)
                 return
             case "--version":
-                writeLine("select-sound \(AppVersion.current)")
+                writeLine("\(AppCommand.name) \(AppVersion.current)")
                 return
             default:
                 throw SelectSoundCommandError.invalidArgument(arguments[0])
