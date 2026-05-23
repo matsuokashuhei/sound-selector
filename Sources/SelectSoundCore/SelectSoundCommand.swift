@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 enum AppVersion {
-    static let current = "0.1.1"
+    static let current = "0.1.2"
 }
 
 enum ConfirmationKey: Equatable {
@@ -36,6 +36,7 @@ public final class SelectSoundCommand {
     private let readInput: () -> String?
     private let readConfirmationKey: () -> ConfirmationKey?
     private let writeOutput: (String) -> Void
+    private let flushOutput: () -> Void
     private let writeErrorOutput: (String) -> Void
 
     public init(
@@ -54,6 +55,7 @@ public final class SelectSoundCommand {
         self.readInput = readInput
         self.readConfirmationKey = Self.readConfirmationKeyFromStandardInput
         self.writeOutput = writeOutput
+        self.flushOutput = { fflush(stdout) }
         self.writeErrorOutput = writeErrorOutput
     }
 
@@ -63,6 +65,7 @@ public final class SelectSoundCommand {
         readInput: @escaping () -> String? = { Swift.readLine() },
         readConfirmationKey: @escaping () -> ConfirmationKey?,
         writeOutput: @escaping (String) -> Void = { text in print(text, terminator: "") },
+        flushOutput: @escaping () -> Void = { fflush(stdout) },
         writeErrorOutput: @escaping (String) -> Void = { text in
             if let data = text.data(using: .utf8) {
                 FileHandle.standardError.write(data)
@@ -74,6 +77,7 @@ public final class SelectSoundCommand {
         self.readInput = readInput
         self.readConfirmationKey = readConfirmationKey
         self.writeOutput = writeOutput
+        self.flushOutput = flushOutput
         self.writeErrorOutput = writeErrorOutput
     }
 
@@ -162,7 +166,7 @@ public final class SelectSoundCommand {
                 }
                 writeLine(line)
             }
-            writeOutput(strings.prompt(hasCurrentDevice: selectableCurrentDevice != nil))
+            writePrompt(strings.prompt(hasCurrentDevice: selectableCurrentDevice != nil))
 
             guard let rawInput = readInput() else {
                 throw SelectSoundCommandError.cancelled
@@ -199,7 +203,7 @@ public final class SelectSoundCommand {
         writeLine(strings.confirmationTitle)
         writeLine("\(strings.inputLabel): \(displayName(for: selectedInput, among: inputDevices))")
         writeLine("\(strings.outputLabel): \(displayName(for: selectedOutput, among: outputDevices))")
-        writeOutput(strings.confirmationPrompt)
+        writePrompt(strings.confirmationPrompt)
 
         while true {
             guard let key = readConfirmationKey() else {
@@ -329,6 +333,11 @@ public final class SelectSoundCommand {
 
     private func writeLine(_ line: String = "") {
         writeOutput("\(line)\n")
+    }
+
+    private func writePrompt(_ prompt: String) {
+        writeOutput(prompt)
+        flushOutput()
     }
 
     private func writeErrorLine(_ line: String) {

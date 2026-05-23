@@ -63,6 +63,47 @@ final class SelectSoundCommandTests: XCTestCase {
         XCTAssertEqual(fake.setOutputHistory, ["output-2"])
     }
 
+    func testConfirmationPromptIsFlushedBeforeWaitingForKey() {
+        let fake = FakeAudioSystem()
+        var remainingInput = ["", ""]
+        var remainingConfirmationKeys: [ConfirmationKey] = [.escape]
+        var events: [String] = []
+        let confirmationPrompt = LocalizedStrings(language: .english).confirmationPrompt
+
+        let command = SelectSoundCommand(
+            audioSystem: fake,
+            language: .english,
+            readInput: {
+                events.append("readInput")
+                return remainingInput.removeFirst()
+            },
+            readConfirmationKey: {
+                events.append("readConfirmationKey")
+                return remainingConfirmationKeys.removeFirst()
+            },
+            writeOutput: { text in
+                if text == confirmationPrompt {
+                    events.append("confirmationPrompt")
+                }
+            },
+            flushOutput: {
+                events.append("flushOutput")
+            },
+            writeErrorOutput: { _ in }
+        )
+
+        XCTAssertEqual(command.run(arguments: []), 0)
+        guard let promptIndex = events.firstIndex(of: "confirmationPrompt"),
+              let flushIndex = events[promptIndex...].firstIndex(of: "flushOutput"),
+              let readKeyIndex = events.firstIndex(of: "readConfirmationKey") else {
+            XCTFail("Expected confirmation prompt, flush, and key read events")
+            return
+        }
+
+        XCTAssertLessThan(promptIndex, flushIndex)
+        XCTAssertLessThan(flushIndex, readKeyIndex)
+    }
+
     func testConfirmationKeyMapsOnlyEnterAndEscape() {
         XCTAssertEqual(ConfirmationKey(byte: 10), .enter)
         XCTAssertEqual(ConfirmationKey(byte: 13), .enter)
@@ -118,7 +159,7 @@ final class SelectSoundCommandTests: XCTestCase {
         let result = runCommand(fake: fake, input: [], arguments: ["--version"])
 
         XCTAssertEqual(result.code, 0)
-        XCTAssertEqual(result.stdout, "select-sound 0.1.1\n")
+        XCTAssertEqual(result.stdout, "select-sound 0.1.2\n")
         XCTAssertEqual(fake.inputDevicesCalls, 0)
         XCTAssertEqual(fake.outputDevicesCalls, 0)
     }
@@ -149,6 +190,7 @@ final class SelectSoundCommandTests: XCTestCase {
                 return remainingConfirmationKeys.removeFirst()
             },
             writeOutput: { stdout += $0 },
+            flushOutput: {},
             writeErrorOutput: { stderr += $0 }
         )
 
