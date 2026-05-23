@@ -11,7 +11,7 @@ select-sound
 1. 音声入力デバイスを番号で選びます。
 2. 音声出力デバイスを番号で選びます。
 3. 選択内容を確認します。
-4. 明示的に `OK` を選ぶと設定を反映します。それ以外はキャンセルです。
+4. 確認画面で Enter を押すと設定を反映します。Esc を押すとキャンセルです。
 
 各デバイス選択では、Enter で現在のデバイスを維持できます。`q` または Ctrl-C でキャンセルできます。
 
@@ -61,4 +61,4 @@ swift run select-sound --version
 select-sound
 ```
 
-Press Enter to keep the current device during input/output selection. Enter `q` or press Ctrl-C to cancel. On the confirmation screen, only explicit `OK` applies the selected devices.
+Press Enter to keep the current device during input/output selection. Enter `q` or press Ctrl-C to cancel. On the confirmation screen, Enter applies the selected devices and Esc cancels.

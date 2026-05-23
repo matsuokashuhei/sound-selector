@@ -1,4 +1,26 @@
+import Darwin
 import Foundation
+
+enum AppVersion {
+    static let current = "0.1.1"
+}
+
+enum ConfirmationKey: Equatable {
+    case enter
+    case escape
+    case other
+
+    init(byte: UInt8) {
+        switch byte {
+        case 10, 13:
+            self = .enter
+        case 27:
+            self = .escape
+        default:
+            self = .other
+        }
+    }
+}
 
 enum SelectSoundCommandError: Error {
     case cancelled
@@ -12,6 +34,7 @@ public final class SelectSoundCommand {
     private let audioSystem: AudioSystem
     private let strings: LocalizedStrings
     private let readInput: () -> String?
+    private let readConfirmationKey: () -> ConfirmationKey?
     private let writeOutput: (String) -> Void
     private let writeErrorOutput: (String) -> Void
 
@@ -29,6 +52,27 @@ public final class SelectSoundCommand {
         self.audioSystem = audioSystem
         self.strings = LocalizedStrings(language: language)
         self.readInput = readInput
+        self.readConfirmationKey = Self.readConfirmationKeyFromStandardInput
+        self.writeOutput = writeOutput
+        self.writeErrorOutput = writeErrorOutput
+    }
+
+    init(
+        audioSystem: AudioSystem,
+        language: AppLanguage = .current(),
+        readInput: @escaping () -> String? = { Swift.readLine() },
+        readConfirmationKey: @escaping () -> ConfirmationKey?,
+        writeOutput: @escaping (String) -> Void = { text in print(text, terminator: "") },
+        writeErrorOutput: @escaping (String) -> Void = { text in
+            if let data = text.data(using: .utf8) {
+                FileHandle.standardError.write(data)
+            }
+        }
+    ) {
+        self.audioSystem = audioSystem
+        self.strings = LocalizedStrings(language: language)
+        self.readInput = readInput
+        self.readConfirmationKey = readConfirmationKey
         self.writeOutput = writeOutput
         self.writeErrorOutput = writeErrorOutput
     }
@@ -53,7 +97,7 @@ public final class SelectSoundCommand {
                 writeOutput(strings.help)
                 return
             case "--version":
-                writeLine("select-sound 0.1.0")
+                writeLine("select-sound \(AppVersion.current)")
                 return
             default:
                 throw SelectSoundCommandError.invalidArgument(arguments[0])
@@ -157,12 +201,23 @@ public final class SelectSoundCommand {
         writeLine("\(strings.outputLabel): \(displayName(for: selectedOutput, among: outputDevices))")
         writeOutput(strings.confirmationPrompt)
 
-        guard let rawInput = readInput() else {
-            return false
-        }
+        while true {
+            guard let key = readConfirmationKey() else {
+                writeLine()
+                return false
+            }
 
-        let input = rawInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return input == "1" || input == "ok"
+            switch key {
+            case .enter:
+                writeLine()
+                return true
+            case .escape:
+                writeLine()
+                return false
+            case .other:
+                continue
+            }
+        }
     }
 
     private func apply(selectedInput: AudioDevice, selectedOutput: AudioDevice) throws {
@@ -278,5 +333,76 @@ public final class SelectSoundCommand {
 
     private func writeErrorLine(_ line: String) {
         writeErrorOutput("\(line)\n")
+    }
+
+    private static func readConfirmationKeyFromStandardInput() -> ConfirmationKey? {
+        let fileDescriptor = STDIN_FILENO
+
+        guard isatty(fileDescriptor) == 1 else {
+            return readConfirmationKey(from: fileDescriptor)
+        }
+
+        var originalAttributes = termios()
+        guard tcgetattr(fileDescriptor, &originalAttributes) == 0 else {
+            return readConfirmationKey(from: fileDescriptor)
+        }
+
+        var rawAttributes = originalAttributes
+        rawAttributes.c_lflag &= ~tcflag_t(ICANON)
+        rawAttributes.c_lflag &= ~tcflag_t(ECHO)
+        withUnsafeMutableBytes(of: &rawAttributes.c_cc) { controlCharacters in
+            controlCharacters[Int(VMIN)] = 1
+            controlCharacters[Int(VTIME)] = 0
+        }
+
+        guard tcsetattr(fileDescriptor, TCSANOW, &rawAttributes) == 0 else {
+            return readConfirmationKey(from: fileDescriptor)
+        }
+        defer {
+            _ = tcsetattr(fileDescriptor, TCSANOW, &originalAttributes)
+        }
+
+        return readConfirmationKey(from: fileDescriptor)
+    }
+
+    private static func readConfirmationKey(from fileDescriptor: Int32) -> ConfirmationKey? {
+        guard let byte = readByte(from: fileDescriptor) else {
+            return nil
+        }
+
+        let key = ConfirmationKey(byte: byte)
+        guard key == .escape else {
+            return key
+        }
+
+        if hasPendingInput(on: fileDescriptor, timeoutMilliseconds: 25) {
+            drainPendingInput(from: fileDescriptor)
+            return .other
+        }
+
+        return .escape
+    }
+
+    private static func readByte(from fileDescriptor: Int32) -> UInt8? {
+        var byte: UInt8 = 0
+        let bytesRead = Darwin.read(fileDescriptor, &byte, 1)
+        guard bytesRead == 1 else {
+            return nil
+        }
+        return byte
+    }
+
+    private static func drainPendingInput(from fileDescriptor: Int32) {
+        while hasPendingInput(on: fileDescriptor, timeoutMilliseconds: 0) {
+            guard readByte(from: fileDescriptor) != nil else {
+                return
+            }
+        }
+    }
+
+    private static func hasPendingInput(on fileDescriptor: Int32, timeoutMilliseconds: Int32) -> Bool {
+        var descriptor = pollfd(fd: fileDescriptor, events: Int16(POLLIN), revents: 0)
+        let result = poll(&descriptor, nfds_t(1), timeoutMilliseconds)
+        return result > 0 && (descriptor.revents & Int16(POLLIN)) != 0
     }
 }

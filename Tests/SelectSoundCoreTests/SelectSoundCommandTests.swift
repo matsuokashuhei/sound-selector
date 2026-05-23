@@ -5,7 +5,7 @@ final class SelectSoundCommandTests: XCTestCase {
     func testKeepsCurrentDevicesWhenUserPressesEnterAndReportsNoChanges() {
         let fake = FakeAudioSystem()
 
-        let result = runCommand(fake: fake, input: ["", "", "1"])
+        let result = runCommand(fake: fake, input: ["", ""], confirmationKeys: [.enter])
 
         XCTAssertEqual(result.code, 0)
         XCTAssertTrue(result.stdout.contains("No changes."))
@@ -13,10 +13,10 @@ final class SelectSoundCommandTests: XCTestCase {
         XCTAssertEqual(fake.setOutputHistory, [])
     }
 
-    func testAppliesSelectedInputAndOutputAfterExplicitOK() {
+    func testAppliesSelectedInputAndOutputAfterEnterConfirmation() {
         let fake = FakeAudioSystem()
 
-        let result = runCommand(fake: fake, input: ["2", "2", "ok"])
+        let result = runCommand(fake: fake, input: ["2", "2"], confirmationKeys: [.enter])
 
         XCTAssertEqual(result.code, 0)
         XCTAssertTrue(result.stdout.contains("Applied devices:"))
@@ -29,7 +29,7 @@ final class SelectSoundCommandTests: XCTestCase {
     func testInvalidSelectionRepromptsOnSameList() {
         let fake = FakeAudioSystem()
 
-        let result = runCommand(fake: fake, input: ["99", "2", "", "1"])
+        let result = runCommand(fake: fake, input: ["99", "2", ""], confirmationKeys: [.enter])
 
         XCTAssertEqual(result.code, 0)
         XCTAssertTrue(result.stdout.contains("Invalid selection. Try again."))
@@ -40,7 +40,7 @@ final class SelectSoundCommandTests: XCTestCase {
     func testConfirmationCancelDoesNotApplyChanges() {
         let fake = FakeAudioSystem()
 
-        let result = runCommand(fake: fake, input: ["2", "2", "2"])
+        let result = runCommand(fake: fake, input: ["2", "2"], confirmationKeys: [.escape])
 
         XCTAssertEqual(result.code, 0)
         XCTAssertTrue(result.stdout.contains("Cancelled."))
@@ -48,6 +48,28 @@ final class SelectSoundCommandTests: XCTestCase {
         XCTAssertEqual(fake.defaultOutput?.uid, "output-1")
         XCTAssertEqual(fake.setInputHistory, [])
         XCTAssertEqual(fake.setOutputHistory, [])
+    }
+
+    func testConfirmationIgnoresOtherKeysUntilEnterOrEscape() {
+        let fake = FakeAudioSystem()
+
+        let result = runCommand(fake: fake, input: ["2", "2"], confirmationKeys: [.other, .enter])
+
+        XCTAssertEqual(result.code, 0)
+        XCTAssertTrue(result.stdout.contains("Applied devices:"))
+        XCTAssertEqual(fake.defaultInput?.uid, "input-2")
+        XCTAssertEqual(fake.defaultOutput?.uid, "output-2")
+        XCTAssertEqual(fake.setInputHistory, ["input-2"])
+        XCTAssertEqual(fake.setOutputHistory, ["output-2"])
+    }
+
+    func testConfirmationKeyMapsOnlyEnterAndEscape() {
+        XCTAssertEqual(ConfirmationKey(byte: 10), .enter)
+        XCTAssertEqual(ConfirmationKey(byte: 13), .enter)
+        XCTAssertEqual(ConfirmationKey(byte: 27), .escape)
+        XCTAssertEqual(ConfirmationKey(byte: 49), .other)
+        XCTAssertEqual(ConfirmationKey(byte: 111), .other)
+        XCTAssertEqual(ConfirmationKey(byte: 107), .other)
     }
 
     func testErrorsWhenInputDevicesAreMissing() {
@@ -65,7 +87,7 @@ final class SelectSoundCommandTests: XCTestCase {
         let fake = FakeAudioSystem()
         fake.outputError = FakeAudioError.failed
 
-        let result = runCommand(fake: fake, input: ["2", "2", "1"])
+        let result = runCommand(fake: fake, input: ["2", "2"], confirmationKeys: [.enter])
 
         XCTAssertEqual(result.code, 1)
         XCTAssertTrue(result.stderr.contains("Could not apply the selected devices"))
@@ -83,7 +105,7 @@ final class SelectSoundCommandTests: XCTestCase {
         ]
         fake.defaultInput = fake.inputs[0]
 
-        let result = runCommand(fake: fake, input: ["", "", "1"])
+        let result = runCommand(fake: fake, input: ["", ""], confirmationKeys: [.enter])
 
         XCTAssertEqual(result.code, 0)
         XCTAssertTrue(result.stdout.contains("USB Audio (UID: input-1)"))
@@ -96,7 +118,7 @@ final class SelectSoundCommandTests: XCTestCase {
         let result = runCommand(fake: fake, input: [], arguments: ["--version"])
 
         XCTAssertEqual(result.code, 0)
-        XCTAssertEqual(result.stdout, "select-sound 0.1.0\n")
+        XCTAssertEqual(result.stdout, "select-sound 0.1.1\n")
         XCTAssertEqual(fake.inputDevicesCalls, 0)
         XCTAssertEqual(fake.outputDevicesCalls, 0)
     }
@@ -104,9 +126,11 @@ final class SelectSoundCommandTests: XCTestCase {
     private func runCommand(
         fake: FakeAudioSystem,
         input: [String],
+        confirmationKeys: [ConfirmationKey] = [],
         arguments: [String] = []
     ) -> (code: Int32, stdout: String, stderr: String) {
         var remainingInput = input
+        var remainingConfirmationKeys = confirmationKeys
         var stdout = ""
         var stderr = ""
         let command = SelectSoundCommand(
@@ -117,6 +141,12 @@ final class SelectSoundCommandTests: XCTestCase {
                     return nil
                 }
                 return remainingInput.removeFirst()
+            },
+            readConfirmationKey: {
+                guard !remainingConfirmationKeys.isEmpty else {
+                    return nil
+                }
+                return remainingConfirmationKeys.removeFirst()
             },
             writeOutput: { stdout += $0 },
             writeErrorOutput: { stderr += $0 }

@@ -107,9 +107,9 @@ struct LocalizedStrings {
     var confirmationPrompt: String {
         switch language {
         case .japanese:
-            return "[1] OK  [2] キャンセル: "
+            return "[Enter] OK  [Esc] キャンセル: "
         case .english:
-            return "[1] OK  [2] Cancel: "
+            return "[Enter] OK  [Esc] Cancel: "
         }
     }
 
@@ -204,7 +204,7 @@ struct LocalizedStrings {
         switch language {
         case .japanese:
             return """
-            select-sound 0.1.0
+            select-sound \(AppVersion.current)
 
             macOS の音声入力デバイスと通常の音声出力デバイスを番号で選択します。
 
@@ -216,12 +216,13 @@ struct LocalizedStrings {
             操作:
               Enter  現在のデバイスを維持
               q      キャンセル
-              1/ok   確認画面でOK
+              Enter  確認画面でOK
+              Esc    確認画面でキャンセル
 
             """
         case .english:
             return """
-            select-sound 0.1.0
+            select-sound \(AppVersion.current)
 
             Select the macOS audio input device and normal audio output device by number.
 
@@ -233,7 +234,8 @@ struct LocalizedStrings {
             Controls:
               Enter  Keep the current device
               q      Cancel
-              1/ok   OK on the confirmation screen
+              Enter  OK on the confirmation screen
+              Esc    Cancel on the confirmation screen
 
             """
         }
