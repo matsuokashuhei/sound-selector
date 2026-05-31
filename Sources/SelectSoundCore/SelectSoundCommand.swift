@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 enum AppVersion {
-    static let current = "0.1.3"
+    static let current = "0.1.4"
 }
 
 enum AppCommand {
@@ -30,6 +30,7 @@ enum SelectSoundCommandError: Error {
     case cancelled
     case invalidArgument(String)
     case noDevices(DeviceDirection)
+    case noBuiltInDevice(DeviceDirection)
     case selectedDeviceUnavailable(DeviceDirection, AudioDevice)
     case applyFailed(cause: Error, rollbackFailures: [String])
 }
@@ -104,6 +105,9 @@ public final class SelectSoundCommand {
             case "--help", "-h":
                 writeOutput(strings.help)
                 return
+            case "--built-in", "-b":
+                try runBuiltInMode()
+                return
             case "--version":
                 writeLine("\(AppCommand.name) \(AppVersion.current)")
                 return
@@ -146,6 +150,29 @@ public final class SelectSoundCommand {
             outputDevices: outputDevices
         ) else {
             throw SelectSoundCommandError.cancelled
+        }
+
+        try apply(selectedInput: selectedInput, selectedOutput: selectedOutput)
+    }
+
+    private func runBuiltInMode() throws {
+        let inputDevices = try audioSystem.inputDevices()
+        let outputDevices = try audioSystem.outputDevices()
+        guard !inputDevices.isEmpty else {
+            throw SelectSoundCommandError.noDevices(.input)
+        }
+        guard !outputDevices.isEmpty else {
+            throw SelectSoundCommandError.noDevices(.output)
+        }
+
+        let currentInput = try audioSystem.defaultInputDevice()
+        let currentOutput = try audioSystem.defaultOutputDevice()
+
+        guard let selectedInput = ordered(devices: inputDevices, currentDevice: currentInput).first(where: \.isBuiltIn) else {
+            throw SelectSoundCommandError.noBuiltInDevice(.input)
+        }
+        guard let selectedOutput = ordered(devices: outputDevices, currentDevice: currentOutput).first(where: \.isBuiltIn) else {
+            throw SelectSoundCommandError.noBuiltInDevice(.output)
         }
 
         try apply(selectedInput: selectedInput, selectedOutput: selectedOutput)
@@ -324,6 +351,8 @@ public final class SelectSoundCommand {
             return strings.unknownArgument(argument)
         case SelectSoundCommandError.noDevices(let direction):
             return strings.noDevices(direction)
+        case SelectSoundCommandError.noBuiltInDevice(let direction):
+            return strings.noBuiltInDevice(direction)
         case SelectSoundCommandError.selectedDeviceUnavailable(let direction, let device):
             return strings.selectedDeviceUnavailable(direction, name: device.name)
         case SelectSoundCommandError.applyFailed(let cause, let rollbackFailures):

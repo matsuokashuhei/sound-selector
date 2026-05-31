@@ -156,11 +156,13 @@ public final class CoreAudioAudioSystem: AudioSystem {
             selector: kAudioObjectPropertyName,
             operation: "get device name"
         )
+        let isBuiltIn = try isBuiltIn(deviceID)
 
         return AudioDevice(
             id: UInt32(deviceID),
             uid: uid,
-            name: name.isEmpty ? uid : name
+            name: name.isEmpty ? uid : name,
+            isBuiltIn: isBuiltIn
         )
     }
 
@@ -182,6 +184,26 @@ public final class CoreAudioAudioSystem: AudioSystem {
         )
 
         return isAlive == 1
+    }
+
+    private func isBuiltIn(_ deviceID: AudioDeviceID) throws -> Bool {
+        var address = propertyAddress(kAudioDevicePropertyTransportType)
+        var transportType: UInt32 = 0
+        var dataSize = UInt32(MemoryLayout<UInt32>.size)
+
+        try check(
+            AudioObjectGetPropertyData(
+                deviceID,
+                &address,
+                0,
+                nil,
+                &dataSize,
+                &transportType
+            ),
+            operation: "get device transport type"
+        )
+
+        return transportType == kAudioDeviceTransportTypeBuiltIn
     }
 
     private func stringProperty(

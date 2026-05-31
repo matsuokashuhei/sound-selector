@@ -15,6 +15,13 @@ audio-selector
 
 各デバイス選択では、Enter で現在のデバイスを維持できます。`q` または Ctrl-C でキャンセルできます。
 
+内蔵の音声入力デバイスと音声出力デバイスへすぐに切り替える場合は、非対話モードを使えます。
+
+```sh
+audio-selector --built-in
+audio-selector -b
+```
+
 このツールは通常の音声出力デバイスだけを変更します。システム効果音や通知音の出力先は変更しません。
 
 ## インストール
@@ -63,3 +70,5 @@ audio-selector
 ```
 
 Press Enter to keep the current device during input/output selection. Enter `q` or press Ctrl-C to cancel. On the confirmation screen, Enter applies the selected devices and Esc cancels.
+
+Use `audio-selector --built-in` or `audio-selector -b` to immediately apply the built-in audio input and output devices without prompts.
