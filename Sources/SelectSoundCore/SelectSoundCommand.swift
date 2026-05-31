@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 enum AppVersion {
-    static let current = "0.1.4"
+    static let current = "0.1.5"
 }
 
 enum AppCommand {
@@ -32,6 +32,7 @@ enum SelectSoundCommandError: Error {
     case noDevices(DeviceDirection)
     case noBuiltInDevice(DeviceDirection)
     case selectedDeviceUnavailable(DeviceDirection, AudioDevice)
+    case appliedDeviceMismatch(DeviceDirection, expected: AudioDevice, actual: AudioDevice?)
     case applyFailed(cause: Error, rollbackFailures: [String])
 }
 
@@ -43,6 +44,7 @@ public final class SelectSoundCommand {
     private let writeOutput: (String) -> Void
     private let flushOutput: () -> Void
     private let writeErrorOutput: (String) -> Void
+    private let waitForDefaultDeviceChange: () -> Void
 
     public init(
         audioSystem: AudioSystem,
@@ -62,6 +64,7 @@ public final class SelectSoundCommand {
         self.writeOutput = writeOutput
         self.flushOutput = { fflush(stdout) }
         self.writeErrorOutput = writeErrorOutput
+        self.waitForDefaultDeviceChange = Self.waitForDefaultDeviceChange
     }
 
     init(
@@ -71,6 +74,7 @@ public final class SelectSoundCommand {
         readConfirmationKey: @escaping () -> ConfirmationKey?,
         writeOutput: @escaping (String) -> Void = { text in print(text, terminator: "") },
         flushOutput: @escaping () -> Void = { fflush(stdout) },
+        waitForDefaultDeviceChange: @escaping () -> Void = {},
         writeErrorOutput: @escaping (String) -> Void = { text in
             if let data = text.data(using: .utf8) {
                 FileHandle.standardError.write(data)
@@ -84,6 +88,7 @@ public final class SelectSoundCommand {
         self.writeOutput = writeOutput
         self.flushOutput = flushOutput
         self.writeErrorOutput = writeErrorOutput
+        self.waitForDefaultDeviceChange = waitForDefaultDeviceChange
     }
 
     public func run(arguments: [String]) -> Int32 {
@@ -286,6 +291,29 @@ public final class SelectSoundCommand {
                 try audioSystem.setDefaultOutputDevice(freshOutput)
                 changedDevices.append((.output, originalOutput))
             }
+
+            if !changedDevices.isEmpty {
+                waitForDefaultDeviceChange()
+            }
+
+            let verifiedInput = try audioSystem.defaultInputDevice()
+            let verifiedOutput = try audioSystem.defaultOutputDevice()
+
+            guard verifiedInput?.uid == freshInput.uid else {
+                throw SelectSoundCommandError.appliedDeviceMismatch(
+                    .input,
+                    expected: freshInput,
+                    actual: verifiedInput
+                )
+            }
+
+            guard verifiedOutput?.uid == freshOutput.uid else {
+                throw SelectSoundCommandError.appliedDeviceMismatch(
+                    .output,
+                    expected: freshOutput,
+                    actual: verifiedOutput
+                )
+            }
         } catch {
             let rollbackFailures = rollback(changedDevices: changedDevices)
             throw SelectSoundCommandError.applyFailed(cause: error, rollbackFailures: rollbackFailures)
@@ -355,10 +383,21 @@ public final class SelectSoundCommand {
             return strings.noBuiltInDevice(direction)
         case SelectSoundCommandError.selectedDeviceUnavailable(let direction, let device):
             return strings.selectedDeviceUnavailable(direction, name: device.name)
+        case SelectSoundCommandError.appliedDeviceMismatch(let direction, let expected, let actual):
+            return strings.appliedDeviceMismatch(direction, expectedName: expected.name, actualName: actual?.name)
         case SelectSoundCommandError.applyFailed(let cause, let rollbackFailures):
-            return strings.applyFailed(cause: String(describing: cause), rollbackFailures: rollbackFailures)
+            return strings.applyFailed(cause: applyFailureCauseMessage(for: cause), rollbackFailures: rollbackFailures)
         case SelectSoundCommandError.cancelled:
             return strings.cancelled
+        default:
+            return String(describing: error)
+        }
+    }
+
+    private func applyFailureCauseMessage(for error: Error) -> String {
+        switch error {
+        case SelectSoundCommandError.appliedDeviceMismatch(let direction, let expected, let actual):
+            return strings.appliedDeviceMismatch(direction, expectedName: expected.name, actualName: actual?.name)
         default:
             return String(describing: error)
         }
@@ -405,6 +444,10 @@ public final class SelectSoundCommand {
         }
 
         return readConfirmationKey(from: fileDescriptor)
+    }
+
+    private static func waitForDefaultDeviceChange() {
+        usleep(200_000)
     }
 
     private static func readConfirmationKey(from fileDescriptor: Int32) -> ConfirmationKey? {
