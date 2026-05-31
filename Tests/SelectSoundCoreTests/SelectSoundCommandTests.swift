@@ -63,6 +63,67 @@ final class SelectSoundCommandTests: XCTestCase {
         XCTAssertEqual(fake.setOutputHistory, ["output-2"])
     }
 
+    func testBuiltInOptionAppliesBuiltInDevicesWithoutPrompting() {
+        let fake = FakeAudioSystem()
+        fake.defaultInput = fake.inputs[1]
+        fake.defaultOutput = fake.outputs[1]
+
+        let result = runCommand(fake: fake, input: [], arguments: ["--built-in"])
+
+        XCTAssertEqual(result.code, 0)
+        XCTAssertTrue(result.stdout.contains("Applied devices:"))
+        XCTAssertFalse(result.stdout.contains("Select an audio input device:"))
+        XCTAssertFalse(result.stdout.contains("Selected devices:"))
+        XCTAssertEqual(fake.defaultInput?.uid, "input-1")
+        XCTAssertEqual(fake.defaultOutput?.uid, "output-1")
+        XCTAssertEqual(fake.setInputHistory, ["input-1"])
+        XCTAssertEqual(fake.setOutputHistory, ["output-1"])
+    }
+
+    func testBuiltInShortOptionAppliesBuiltInDevicesWithoutPrompting() {
+        let fake = FakeAudioSystem()
+        fake.defaultInput = fake.inputs[1]
+        fake.defaultOutput = fake.outputs[1]
+
+        let result = runCommand(fake: fake, input: [], arguments: ["-b"])
+
+        XCTAssertEqual(result.code, 0)
+        XCTAssertEqual(fake.defaultInput?.uid, "input-1")
+        XCTAssertEqual(fake.defaultOutput?.uid, "output-1")
+        XCTAssertEqual(fake.setInputHistory, ["input-1"])
+        XCTAssertEqual(fake.setOutputHistory, ["output-1"])
+    }
+
+    func testBuiltInOptionErrorsWhenBuiltInInputIsMissing() {
+        let fake = FakeAudioSystem()
+        fake.inputs = [
+            AudioDevice(id: 2, uid: "input-2", name: "USB Microphone", isBuiltIn: false)
+        ]
+        fake.defaultInput = fake.inputs[0]
+
+        let result = runCommand(fake: fake, input: [], arguments: ["--built-in"])
+
+        XCTAssertEqual(result.code, 1)
+        XCTAssertTrue(result.stderr.contains("No built-in audio input device found."))
+        XCTAssertEqual(fake.setInputHistory, [])
+        XCTAssertEqual(fake.setOutputHistory, [])
+    }
+
+    func testBuiltInOptionErrorsWhenBuiltInOutputIsMissing() {
+        let fake = FakeAudioSystem()
+        fake.outputs = [
+            AudioDevice(id: 12, uid: "output-2", name: "USB Speakers", isBuiltIn: false)
+        ]
+        fake.defaultOutput = fake.outputs[0]
+
+        let result = runCommand(fake: fake, input: [], arguments: ["--built-in"])
+
+        XCTAssertEqual(result.code, 1)
+        XCTAssertTrue(result.stderr.contains("No built-in audio output device found."))
+        XCTAssertEqual(fake.setInputHistory, [])
+        XCTAssertEqual(fake.setOutputHistory, [])
+    }
+
     func testConfirmationPromptIsFlushedBeforeWaitingForKey() {
         let fake = FakeAudioSystem()
         var remainingInput = ["", ""]
@@ -159,7 +220,7 @@ final class SelectSoundCommandTests: XCTestCase {
         let result = runCommand(fake: fake, input: [], arguments: ["--version"])
 
         XCTAssertEqual(result.code, 0)
-        XCTAssertEqual(result.stdout, "audio-selector 0.1.3\n")
+        XCTAssertEqual(result.stdout, "audio-selector 0.1.4\n")
         XCTAssertEqual(fake.inputDevicesCalls, 0)
         XCTAssertEqual(fake.outputDevicesCalls, 0)
     }
@@ -171,6 +232,8 @@ final class SelectSoundCommandTests: XCTestCase {
 
         XCTAssertEqual(result.code, 0)
         XCTAssertTrue(result.stdout.contains("audio-selector --version"))
+        XCTAssertTrue(result.stdout.contains("audio-selector --built-in"))
+        XCTAssertTrue(result.stdout.contains("audio-selector -b"))
         XCTAssertEqual(fake.inputDevicesCalls, 0)
         XCTAssertEqual(fake.outputDevicesCalls, 0)
     }
@@ -216,12 +279,12 @@ private enum FakeAudioError: Error {
 
 private final class FakeAudioSystem: AudioSystem {
     var inputs = [
-        AudioDevice(id: 1, uid: "input-1", name: "Built-in Microphone"),
-        AudioDevice(id: 2, uid: "input-2", name: "USB Microphone")
+        AudioDevice(id: 1, uid: "input-1", name: "Built-in Microphone", isBuiltIn: true),
+        AudioDevice(id: 2, uid: "input-2", name: "USB Microphone", isBuiltIn: false)
     ]
     var outputs = [
-        AudioDevice(id: 11, uid: "output-1", name: "Built-in Speakers"),
-        AudioDevice(id: 12, uid: "output-2", name: "USB Speakers")
+        AudioDevice(id: 11, uid: "output-1", name: "Built-in Speakers", isBuiltIn: true),
+        AudioDevice(id: 12, uid: "output-2", name: "USB Speakers", isBuiltIn: false)
     ]
     var defaultInput: AudioDevice?
     var defaultOutput: AudioDevice?

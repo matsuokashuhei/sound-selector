@@ -149,6 +149,15 @@ struct LocalizedStrings {
         }
     }
 
+    func noBuiltInDevice(_ direction: DeviceDirection) -> String {
+        switch language {
+        case .japanese:
+            return "内蔵\(deviceName(direction))が見つかりません。"
+        case .english:
+            return "No built-in \(deviceName(direction)) found."
+        }
+    }
+
     func selectedDeviceUnavailable(_ direction: DeviceDirection, name: String) -> String {
         switch language {
         case .japanese:
@@ -210,8 +219,13 @@ struct LocalizedStrings {
 
             使い方:
               \(AppCommand.name)
+              \(AppCommand.name) --built-in
+              \(AppCommand.name) -b
               \(AppCommand.name) --help
               \(AppCommand.name) --version
+
+            オプション:
+              --built-in, -b  内蔵の音声入力デバイスと音声出力デバイスを選択してすぐに反映
 
             操作:
               Enter  現在のデバイスを維持
@@ -228,8 +242,13 @@ struct LocalizedStrings {
 
             Usage:
               \(AppCommand.name)
+              \(AppCommand.name) --built-in
+              \(AppCommand.name) -b
               \(AppCommand.name) --help
               \(AppCommand.name) --version
+
+            Options:
+              --built-in, -b  Apply the built-in audio input and output devices
 
             Controls:
               Enter  Keep the current device

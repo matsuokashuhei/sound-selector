@@ -4,11 +4,13 @@ public struct AudioDevice: Equatable, Hashable, Sendable {
     public let id: UInt32
     public let uid: String
     public let name: String
+    public let isBuiltIn: Bool
 
-    public init(id: UInt32, uid: String, name: String) {
+    public init(id: UInt32, uid: String, name: String, isBuiltIn: Bool = false) {
         self.id = id
         self.uid = uid
         self.name = name
+        self.isBuiltIn = isBuiltIn
     }
 }
 
