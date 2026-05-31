@@ -124,6 +124,23 @@ final class SelectSoundCommandTests: XCTestCase {
         XCTAssertEqual(fake.setOutputHistory, [])
     }
 
+    func testBuiltInOptionRollsBackWhenInputSetIsAcceptedButDoesNotBecomeDefault() {
+        let fake = FakeAudioSystem()
+        fake.defaultInput = fake.inputs[1]
+        fake.defaultOutput = fake.outputs[1]
+        fake.ignoredInputUIDs = ["input-1"]
+
+        let result = runCommand(fake: fake, input: [], arguments: ["--built-in"])
+
+        XCTAssertEqual(result.code, 1)
+        XCTAssertTrue(result.stderr.contains("Could not apply the selected devices"))
+        XCTAssertTrue(result.stderr.contains("audio input device did not change to \"Built-in Microphone\""))
+        XCTAssertEqual(fake.defaultInput?.uid, "input-2")
+        XCTAssertEqual(fake.defaultOutput?.uid, "output-2")
+        XCTAssertEqual(fake.setInputHistory, ["input-1", "input-2"])
+        XCTAssertEqual(fake.setOutputHistory, ["output-1", "output-2"])
+    }
+
     func testConfirmationPromptIsFlushedBeforeWaitingForKey() {
         let fake = FakeAudioSystem()
         var remainingInput = ["", ""]
@@ -220,7 +237,7 @@ final class SelectSoundCommandTests: XCTestCase {
         let result = runCommand(fake: fake, input: [], arguments: ["--version"])
 
         XCTAssertEqual(result.code, 0)
-        XCTAssertEqual(result.stdout, "audio-selector 0.1.4\n")
+        XCTAssertEqual(result.stdout, "audio-selector 0.1.5\n")
         XCTAssertEqual(fake.inputDevicesCalls, 0)
         XCTAssertEqual(fake.outputDevicesCalls, 0)
     }
@@ -290,6 +307,8 @@ private final class FakeAudioSystem: AudioSystem {
     var defaultOutput: AudioDevice?
     var inputError: Error?
     var outputError: Error?
+    var ignoredInputUIDs: Set<String> = []
+    var ignoredOutputUIDs: Set<String> = []
     var setInputHistory: [String] = []
     var setOutputHistory: [String] = []
     var inputDevicesCalls = 0
@@ -323,6 +342,9 @@ private final class FakeAudioSystem: AudioSystem {
         if let inputError {
             throw inputError
         }
+        guard !ignoredInputUIDs.contains(device.uid) else {
+            return
+        }
         defaultInput = device
     }
 
@@ -330,6 +352,9 @@ private final class FakeAudioSystem: AudioSystem {
         setOutputHistory.append(device.uid)
         if let outputError {
             throw outputError
+        }
+        guard !ignoredOutputUIDs.contains(device.uid) else {
+            return
         }
         defaultOutput = device
     }

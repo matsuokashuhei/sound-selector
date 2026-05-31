@@ -167,6 +167,25 @@ struct LocalizedStrings {
         }
     }
 
+    func appliedDeviceMismatch(
+        _ direction: DeviceDirection,
+        expectedName: String,
+        actualName: String?
+    ) -> String {
+        switch language {
+        case .japanese:
+            if let actualName {
+                return "\(deviceName(direction))が「\(expectedName)」に変わりませんでした。現在のデバイス: 「\(actualName)」"
+            }
+            return "\(deviceName(direction))が「\(expectedName)」に変わりませんでした。現在のデバイスはありません。"
+        case .english:
+            if let actualName {
+                return "The \(deviceName(direction)) did not change to \"\(expectedName)\". Current device: \"\(actualName)\"."
+            }
+            return "The \(deviceName(direction)) did not change to \"\(expectedName)\". There is no current device."
+        }
+    }
+
     func duplicateSuffix(uid: String) -> String {
         switch language {
         case .japanese:
