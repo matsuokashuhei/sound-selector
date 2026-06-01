@@ -61,6 +61,15 @@ swift run audio-selector --version
 
 自動テストでは CoreAudio を fake 化しており、実際のMac音声設定は変更しません。
 
+リリース前には、tag 作成と Homebrew tap 更新の前に実機 smoke test を実行します。
+
+```sh
+swift build -c release
+scripts/release-smoke-audio.sh --built-in
+```
+
+この smoke test は現在の音声入力/出力を保存し、`--built-in` が実機で安定して反映されるか確認してから元の設定へ戻します。詳細は [Release Checklist](docs/release-checklist.md) を参照してください。
+
 ## English usage
 
 `audio-selector` is a macOS-only CLI for selecting the default audio input device and the normal audio output device by keyboard.

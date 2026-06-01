@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 enum AppVersion {
-    static let current = "0.1.5"
+    static let current = "0.1.6"
 }
 
 enum AppCommand {
@@ -282,38 +282,27 @@ public final class SelectSoundCommand {
         var changedDevices: [(direction: DeviceDirection, original: AudioDevice?)] = []
 
         do {
-            if originalInput?.uid != freshInput.uid {
-                try audioSystem.setDefaultInputDevice(freshInput)
-                changedDevices.append((.input, originalInput))
-            }
-
             if originalOutput?.uid != freshOutput.uid {
                 try audioSystem.setDefaultOutputDevice(freshOutput)
                 changedDevices.append((.output, originalOutput))
             }
 
-            if !changedDevices.isEmpty {
-                waitForDefaultDeviceChange()
+            let outputChanged = originalOutput?.uid != freshOutput.uid
+            let inputShouldBeApplied = originalInput?.uid != freshInput.uid || outputChanged
+            let appliedInput: AudioDevice
+            if inputShouldBeApplied {
+                let refreshedInputs = outputChanged ? try audioSystem.inputDevices() : latestInputs
+                guard let refreshedInput = refreshedInputs.first(withUID: freshInput.uid) else {
+                    throw SelectSoundCommandError.selectedDeviceUnavailable(.input, freshInput)
+                }
+                try audioSystem.setDefaultInputDevice(refreshedInput)
+                changedDevices.append((.input, originalInput))
+                appliedInput = refreshedInput
+            } else {
+                appliedInput = freshInput
             }
 
-            let verifiedInput = try audioSystem.defaultInputDevice()
-            let verifiedOutput = try audioSystem.defaultOutputDevice()
-
-            guard verifiedInput?.uid == freshInput.uid else {
-                throw SelectSoundCommandError.appliedDeviceMismatch(
-                    .input,
-                    expected: freshInput,
-                    actual: verifiedInput
-                )
-            }
-
-            guard verifiedOutput?.uid == freshOutput.uid else {
-                throw SelectSoundCommandError.appliedDeviceMismatch(
-                    .output,
-                    expected: freshOutput,
-                    actual: verifiedOutput
-                )
-            }
+            try waitUntilApplied(expectedInput: appliedInput, expectedOutput: freshOutput)
         } catch {
             let rollbackFailures = rollback(changedDevices: changedDevices)
             throw SelectSoundCommandError.applyFailed(cause: error, rollbackFailures: rollbackFailures)
@@ -322,6 +311,41 @@ public final class SelectSoundCommand {
         writeLine(strings.appliedTitle)
         writeLine("\(strings.inputLabel): \(displayName(for: freshInput, among: latestInputs))")
         writeLine("\(strings.outputLabel): \(displayName(for: freshOutput, among: latestOutputs))")
+    }
+
+    private func waitUntilApplied(expectedInput: AudioDevice, expectedOutput: AudioDevice) throws {
+        var verifiedInput: AudioDevice?
+        var verifiedOutput: AudioDevice?
+
+        for attempt in 0..<10 {
+            verifiedInput = try audioSystem.defaultInputDevice()
+            verifiedOutput = try audioSystem.defaultOutputDevice()
+
+            if verifiedInput?.uid == expectedInput.uid,
+               verifiedOutput?.uid == expectedOutput.uid {
+                return
+            }
+
+            if attempt < 9 {
+                waitForDefaultDeviceChange()
+            }
+        }
+
+        if verifiedInput?.uid != expectedInput.uid {
+            throw SelectSoundCommandError.appliedDeviceMismatch(
+                .input,
+                expected: expectedInput,
+                actual: verifiedInput
+            )
+        }
+
+        if verifiedOutput?.uid != expectedOutput.uid {
+            throw SelectSoundCommandError.appliedDeviceMismatch(
+                .output,
+                expected: expectedOutput,
+                actual: verifiedOutput
+            )
+        }
     }
 
     private func rollback(changedDevices: [(direction: DeviceDirection, original: AudioDevice?)]) -> [String] {
