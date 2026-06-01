@@ -158,6 +158,56 @@ struct LocalizedStrings {
         }
     }
 
+    func shortcutNotConfigured(key: String) -> String {
+        switch language {
+        case .japanese:
+            return "-\(key) に対応するデバイスショートカットが設定されていません。"
+        case .english:
+            return "No device shortcut configured for -\(key)."
+        }
+    }
+
+    func shortcutDeviceNotFound(_ direction: DeviceDirection, key: String, query: String) -> String {
+        switch language {
+        case .japanese:
+            return "\(deviceName(direction))がショートカット -\(key) に一致しませんでした: \(query)"
+        case .english:
+            return "No \(deviceName(direction)) matched shortcut -\(key): \(query)"
+        }
+    }
+
+    func shortcutDeviceAmbiguous(
+        _ direction: DeviceDirection,
+        key: String,
+        query: String,
+        matches: [String]
+    ) -> String {
+        switch language {
+        case .japanese:
+            return "複数の\(deviceName(direction))がショートカット -\(key) に一致しました: \(query)。一致: \(matches.joined(separator: ", "))"
+        case .english:
+            return "Multiple \(deviceName(direction))s matched shortcut -\(key): \(query). Matches: \(matches.joined(separator: ", "))"
+        }
+    }
+
+    func shortcutConfigMissing(url: URL) -> String {
+        switch language {
+        case .japanese:
+            return "ショートカット設定が見つかりません: \(url.path)"
+        case .english:
+            return "Shortcut config not found: \(url.path)"
+        }
+    }
+
+    func shortcutConfigInvalid(url: URL, reason: String) -> String {
+        switch language {
+        case .japanese:
+            return "ショートカット設定を読み込めませんでした: \(url.path)。原因: \(reason)"
+        case .english:
+            return "Could not read shortcut config at \(url.path): \(reason)"
+        }
+    }
+
     func selectedDeviceUnavailable(_ direction: DeviceDirection, name: String) -> String {
         switch language {
         case .japanese:
@@ -240,11 +290,22 @@ struct LocalizedStrings {
               \(AppCommand.name)
               \(AppCommand.name) --built-in
               \(AppCommand.name) -b
+              \(AppCommand.name) -1
               \(AppCommand.name) --help
               \(AppCommand.name) --version
 
             オプション:
               --built-in, -b  内蔵の音声入力デバイスと音声出力デバイスを選択してすぐに反映
+              -1 ... -9      ~/.config/audio-selector/shortcuts.json のショートカットを反映
+
+            ショートカット設定例:
+              {
+                "shortcuts": {
+                  "1": "AirPods",
+                  "2": "Bose CP",
+                  "3": "Shokz OpenMeet"
+                }
+              }
 
             操作:
               Enter  現在のデバイスを維持
@@ -263,11 +324,22 @@ struct LocalizedStrings {
               \(AppCommand.name)
               \(AppCommand.name) --built-in
               \(AppCommand.name) -b
+              \(AppCommand.name) -1
               \(AppCommand.name) --help
               \(AppCommand.name) --version
 
             Options:
               --built-in, -b  Apply the built-in audio input and output devices
+              -1 ... -9      Apply a shortcut from ~/.config/audio-selector/shortcuts.json
+
+            Shortcut config example:
+              {
+                "shortcuts": {
+                  "1": "AirPods",
+                  "2": "Bose CP",
+                  "3": "Shokz OpenMeet"
+                }
+              }
 
             Controls:
               Enter  Keep the current device
