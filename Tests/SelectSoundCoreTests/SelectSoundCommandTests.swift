@@ -26,6 +26,20 @@ final class SelectSoundCommandTests: XCTestCase {
         XCTAssertEqual(fake.setOutputHistory, ["output-2"])
     }
 
+    func testAppliesInputAfterOutputWhenOutputSelectionReselectsInput() {
+        let fake = FakeAudioSystem()
+        fake.resetInputToDefaultWhenSettingOutput = true
+
+        let result = runCommand(fake: fake, input: ["2", "2"], confirmationKeys: [.enter])
+
+        XCTAssertEqual(result.code, 0)
+        XCTAssertTrue(result.stdout.contains("Applied devices:"))
+        XCTAssertEqual(fake.defaultInput?.uid, "input-2")
+        XCTAssertEqual(fake.defaultOutput?.uid, "output-2")
+        XCTAssertEqual(fake.setOutputHistory, ["output-2"])
+        XCTAssertEqual(fake.setInputHistory, ["input-2"])
+    }
+
     func testInvalidSelectionRepromptsOnSameList() {
         let fake = FakeAudioSystem()
 
@@ -202,7 +216,7 @@ final class SelectSoundCommandTests: XCTestCase {
         XCTAssertTrue(result.stderr.contains("No selectable audio input devices found."))
     }
 
-    func testRollsBackInputWhenOutputApplyFails() {
+    func testDoesNotChangeInputWhenOutputApplyFails() {
         let fake = FakeAudioSystem()
         fake.outputError = FakeAudioError.failed
 
@@ -212,7 +226,7 @@ final class SelectSoundCommandTests: XCTestCase {
         XCTAssertTrue(result.stderr.contains("Could not apply the selected devices"))
         XCTAssertEqual(fake.defaultInput?.uid, "input-1")
         XCTAssertEqual(fake.defaultOutput?.uid, "output-1")
-        XCTAssertEqual(fake.setInputHistory, ["input-2", "input-1"])
+        XCTAssertEqual(fake.setInputHistory, [])
         XCTAssertEqual(fake.setOutputHistory, ["output-2"])
     }
 
@@ -237,7 +251,7 @@ final class SelectSoundCommandTests: XCTestCase {
         let result = runCommand(fake: fake, input: [], arguments: ["--version"])
 
         XCTAssertEqual(result.code, 0)
-        XCTAssertEqual(result.stdout, "audio-selector 0.1.5\n")
+        XCTAssertEqual(result.stdout, "audio-selector 0.1.6\n")
         XCTAssertEqual(fake.inputDevicesCalls, 0)
         XCTAssertEqual(fake.outputDevicesCalls, 0)
     }
@@ -309,6 +323,7 @@ private final class FakeAudioSystem: AudioSystem {
     var outputError: Error?
     var ignoredInputUIDs: Set<String> = []
     var ignoredOutputUIDs: Set<String> = []
+    var resetInputToDefaultWhenSettingOutput = false
     var setInputHistory: [String] = []
     var setOutputHistory: [String] = []
     var inputDevicesCalls = 0
@@ -357,5 +372,8 @@ private final class FakeAudioSystem: AudioSystem {
             return
         }
         defaultOutput = device
+        if resetInputToDefaultWhenSettingOutput {
+            defaultInput = inputs[0]
+        }
     }
 }
