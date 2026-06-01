@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 enum AppVersion {
-    static let current = "0.1.6"
+    static let current = "0.1.7"
 }
 
 enum AppCommand {
@@ -31,6 +31,9 @@ enum SelectSoundCommandError: Error {
     case invalidArgument(String)
     case noDevices(DeviceDirection)
     case noBuiltInDevice(DeviceDirection)
+    case shortcutNotConfigured(String)
+    case shortcutDeviceNotFound(DeviceDirection, key: String, query: String)
+    case shortcutDeviceAmbiguous(DeviceDirection, key: String, query: String, matches: [AudioDevice])
     case selectedDeviceUnavailable(DeviceDirection, AudioDevice)
     case appliedDeviceMismatch(DeviceDirection, expected: AudioDevice, actual: AudioDevice?)
     case applyFailed(cause: Error, rollbackFailures: [String])
@@ -45,6 +48,7 @@ public final class SelectSoundCommand {
     private let flushOutput: () -> Void
     private let writeErrorOutput: (String) -> Void
     private let waitForDefaultDeviceChange: () -> Void
+    private let shortcutConfigLoader: () throws -> AudioShortcutConfig
 
     public init(
         audioSystem: AudioSystem,
@@ -65,6 +69,7 @@ public final class SelectSoundCommand {
         self.flushOutput = { fflush(stdout) }
         self.writeErrorOutput = writeErrorOutput
         self.waitForDefaultDeviceChange = Self.waitForDefaultDeviceChange
+        self.shortcutConfigLoader = AudioShortcutConfig.loadDefault
     }
 
     init(
@@ -79,7 +84,8 @@ public final class SelectSoundCommand {
             if let data = text.data(using: .utf8) {
                 FileHandle.standardError.write(data)
             }
-        }
+        },
+        shortcutConfigLoader: @escaping () throws -> AudioShortcutConfig = AudioShortcutConfig.loadDefault
     ) {
         self.audioSystem = audioSystem
         self.strings = LocalizedStrings(language: language)
@@ -89,6 +95,7 @@ public final class SelectSoundCommand {
         self.flushOutput = flushOutput
         self.writeErrorOutput = writeErrorOutput
         self.waitForDefaultDeviceChange = waitForDefaultDeviceChange
+        self.shortcutConfigLoader = shortcutConfigLoader
     }
 
     public func run(arguments: [String]) -> Int32 {
@@ -117,6 +124,10 @@ public final class SelectSoundCommand {
                 writeLine("\(AppCommand.name) \(AppVersion.current)")
                 return
             default:
+                if let shortcutKey = Self.shortcutKey(from: arguments[0]) {
+                    try runShortcutMode(key: shortcutKey)
+                    return
+                }
                 throw SelectSoundCommandError.invalidArgument(arguments[0])
             }
         }
@@ -160,6 +171,42 @@ public final class SelectSoundCommand {
         try apply(selectedInput: selectedInput, selectedOutput: selectedOutput)
     }
 
+    private func runShortcutMode(key: String) throws {
+        let config = try shortcutConfigLoader()
+        guard let rawQuery = config.shortcuts[key] else {
+            throw SelectSoundCommandError.shortcutNotConfigured(key)
+        }
+
+        let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            throw SelectSoundCommandError.shortcutNotConfigured(key)
+        }
+
+        let inputDevices = try audioSystem.inputDevices()
+        let outputDevices = try audioSystem.outputDevices()
+        guard !inputDevices.isEmpty else {
+            throw SelectSoundCommandError.noDevices(.input)
+        }
+        guard !outputDevices.isEmpty else {
+            throw SelectSoundCommandError.noDevices(.output)
+        }
+
+        let selectedInput = try shortcutDevice(
+            direction: .input,
+            devices: inputDevices,
+            key: key,
+            query: query
+        )
+        let selectedOutput = try shortcutDevice(
+            direction: .output,
+            devices: outputDevices,
+            key: key,
+            query: query
+        )
+
+        try apply(selectedInput: selectedInput, selectedOutput: selectedOutput)
+    }
+
     private func runBuiltInMode() throws {
         let inputDevices = try audioSystem.inputDevices()
         let outputDevices = try audioSystem.outputDevices()
@@ -181,6 +228,31 @@ public final class SelectSoundCommand {
         }
 
         try apply(selectedInput: selectedInput, selectedOutput: selectedOutput)
+    }
+
+    private func shortcutDevice(
+        direction: DeviceDirection,
+        devices: [AudioDevice],
+        key: String,
+        query: String
+    ) throws -> AudioDevice {
+        let tokens = query
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        let matches = ordered(devices: devices, currentDevice: nil).filter { device in
+            tokens.allSatisfy { token in
+                device.name.localizedCaseInsensitiveContains(token)
+            }
+        }
+
+        switch matches.count {
+        case 1:
+            return matches[0]
+        case 0:
+            throw SelectSoundCommandError.shortcutDeviceNotFound(direction, key: key, query: query)
+        default:
+            throw SelectSoundCommandError.shortcutDeviceAmbiguous(direction, key: key, query: query, matches: matches)
+        }
     }
 
     private func selectDevice(
@@ -405,6 +477,17 @@ public final class SelectSoundCommand {
             return strings.noDevices(direction)
         case SelectSoundCommandError.noBuiltInDevice(let direction):
             return strings.noBuiltInDevice(direction)
+        case SelectSoundCommandError.shortcutNotConfigured(let key):
+            return strings.shortcutNotConfigured(key: key)
+        case SelectSoundCommandError.shortcutDeviceNotFound(let direction, let key, let query):
+            return strings.shortcutDeviceNotFound(direction, key: key, query: query)
+        case SelectSoundCommandError.shortcutDeviceAmbiguous(let direction, let key, let query, let matches):
+            return strings.shortcutDeviceAmbiguous(
+                direction,
+                key: key,
+                query: query,
+                matches: matches.map(\.name)
+            )
         case SelectSoundCommandError.selectedDeviceUnavailable(let direction, let device):
             return strings.selectedDeviceUnavailable(direction, name: device.name)
         case SelectSoundCommandError.appliedDeviceMismatch(let direction, let expected, let actual):
@@ -413,6 +496,10 @@ public final class SelectSoundCommand {
             return strings.applyFailed(cause: applyFailureCauseMessage(for: cause), rollbackFailures: rollbackFailures)
         case SelectSoundCommandError.cancelled:
             return strings.cancelled
+        case AudioShortcutConfigError.missingConfig(let url):
+            return strings.shortcutConfigMissing(url: url)
+        case AudioShortcutConfigError.invalidConfig(let url, let reason):
+            return strings.shortcutConfigInvalid(url: url, reason: reason)
         default:
             return String(describing: error)
         }
@@ -513,5 +600,19 @@ public final class SelectSoundCommand {
         var descriptor = pollfd(fd: fileDescriptor, events: Int16(POLLIN), revents: 0)
         let result = poll(&descriptor, nfds_t(1), timeoutMilliseconds)
         return result > 0 && (descriptor.revents & Int16(POLLIN)) != 0
+    }
+
+    private static func shortcutKey(from argument: String) -> String? {
+        guard argument.count == 2,
+              argument.first == "-" else {
+            return nil
+        }
+
+        let key = String(argument.dropFirst())
+        guard let number = Int(key),
+              (1...9).contains(number) else {
+            return nil
+        }
+        return key
     }
 }

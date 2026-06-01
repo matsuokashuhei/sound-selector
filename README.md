@@ -22,6 +22,31 @@ audio-selector --built-in
 audio-selector -b
 ```
 
+よく使う外部デバイスも、ショートカット設定を作ると非対話で切り替えられます。
+
+```sh
+mkdir -p ~/.config/audio-selector
+$EDITOR ~/.config/audio-selector/shortcuts.json
+```
+
+```json
+{
+  "shortcuts": {
+    "1": "AirPods",
+    "2": "Bose CP",
+    "3": "Shokz OpenMeet"
+  }
+}
+```
+
+```sh
+audio-selector -1
+audio-selector -2
+audio-selector -3
+```
+
+ショートカットのデバイス名は、大文字小文字を区別せず、空白区切りの単語がすべて含まれるデバイスに一致します。例えば `Shokz OpenMeet` は `OpenMeet by Shokz` に一致します。入力側または出力側で一致しない場合や、複数のデバイスに一致する場合は、設定を変更せずにエラーで終了します。
+
 このツールは通常の音声出力デバイスだけを変更します。システム効果音や通知音の出力先は変更しません。
 
 ## インストール
@@ -81,3 +106,17 @@ audio-selector
 Press Enter to keep the current device during input/output selection. Enter `q` or press Ctrl-C to cancel. On the confirmation screen, Enter applies the selected devices and Esc cancels.
 
 Use `audio-selector --built-in` or `audio-selector -b` to immediately apply the built-in audio input and output devices without prompts.
+
+Create `~/.config/audio-selector/shortcuts.json` to define shortcut options for frequently used devices:
+
+```json
+{
+  "shortcuts": {
+    "1": "AirPods",
+    "2": "Bose CP",
+    "3": "Shokz OpenMeet"
+  }
+}
+```
+
+Then run `audio-selector -1`, `audio-selector -2`, or `audio-selector -3`. Shortcut matching is case-insensitive and requires every whitespace-separated token to appear in the device name, so `Shokz OpenMeet` matches `OpenMeet by Shokz`. If the input or output side has no match or multiple matches, no audio settings are changed.
